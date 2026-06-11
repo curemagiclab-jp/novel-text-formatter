@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小説文書修正 — Novel Text Formatter</title>
+<style>
+:root{
+  --paper:#f3ecdc;
+  --paper-card:#faf5e9;
+  --paper-deep:#ece2cc;
+  --ink:#2b2620;
+  --ink-soft:#5a5246;
+  --ink-faint:#8d8270;
+  --line:#c9b995;
+  --line-soft:#ddd0b2;
+  --shu:#b73a2b;          /* 朱 */
+  --shu-deep:#93281c;
+  --shu-pale:#e8c9c2;
+  --focus:#b73a2b44;
+  --paper-tool:#f6efe0;
+  --field:#fffdf6;
+  --placeholder:#b3a88f;
+  --on-shu:#fdf8ee;
+  --grad:#faf5e9cc;
+  --grid-v:#c9b99522;
+  --grid-h:#c9b99518;
+  --toast-bg:#2b2620;
+  --serif:"Shippori Mincho","Yu Mincho","YuMincho","Hiragino Mincho ProN","BIZ UDPMincho","MS PMincho",serif;
+}
+body.dark{
+  --paper:#1e1b16;
+  --paper-card:#27221b;
+  --paper-deep:#2d2820;
+  --ink:#e8e0cf;
+  --ink-soft:#b5ab97;
+  --ink-faint:#847b69;
+  --line:#4a4234;
+  --line-soft:#3a342a;
+  --shu:#d05a48;
+  --shu-deep:#a93826;
+  --shu-pale:#5a2c25;
+  --focus:#d05a4855;
+  --paper-tool:#211d17;
+  --field:#1a1713;
+  --placeholder:#6b6253;
+  --grad:#27221bcc;
+  --grid-v:#4a423426;
+  --grid-h:#4a42341c;
+  --toast-bg:#0f0d0a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:var(--serif);
+  color:var(--ink);
+  background-color:var(--paper);
+  background-image:
+    /* 紙のノイズ */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E"),
+    /* 原稿用紙風の淡い罫 */
+    repeating-linear-gradient(90deg, transparent 0 39px, var(--grid-v) 39px 40px),
+    repeating-linear-gradient(0deg, transparent 0 39px, var(--grid-h) 39px 40px);
+  display:flex;
+  flex-direction:column;
+  min-height:100vh;
+  transition:background-color .25s, color .25s;
+}
+body.dark{
+  background-image:
+    /* 夜紙のノイズ(白) */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E"),
+    repeating-linear-gradient(90deg, transparent 0 39px, var(--grid-v) 39px 40px),
+    repeating-linear-gradient(0deg, transparent 0 39px, var(--grid-h) 39px 40px);
+}
+
+/* ── ヘッダー ─────────────────────────── */
+header{
+  position:relative;
+  padding:20px 32px 16px;
+  border-bottom:3px double var(--ink);
+  background:linear-gradient(180deg,var(--grad), transparent);
+  display:flex;
+  align-items:baseline;
+  gap:18px;
+  flex-wrap:wrap;
+}
+header h1{
+  font-size:1.75rem;
+  font-weight:700;
+  letter-spacing:.45em;
+  text-indent:.1em;
+}
+header .sub{
+  font-size:.78rem;
+  letter-spacing:.28em;
+  color:var(--ink-faint);
+}
+#btnTheme{
+  position:absolute;
+  right:92px;
+  top:50%;
+  transform:translateY(-50%);
+  font-family:var(--serif);
+  font-size:.85rem;
+  letter-spacing:.1em;
+  color:var(--ink-soft);
+  background:var(--field);
+  border:1px solid var(--line);
+  padding:7px 12px;
+  cursor:pointer;
+  transition:border-color .15s,color .15s;
+}
+#btnTheme:hover{border-color:var(--shu);color:var(--shu)}
+header .seal{
+  position:absolute;
+  right:30px;
+  top:50%;
+  transform:translateY(-50%) rotate(-4deg);
+  width:44px;height:44px;
+  border:2.5px solid var(--shu);
+  border-radius:6px;
+  color:var(--shu);
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.4rem;font-weight:700;
+  opacity:.85;
+  box-shadow:0 0 0 1px #b73a2b22 inset;
+  user-select:none;
+}
+
+/* ── メイン3ペイン ────────────────────── */
+main{
+  flex:1;
+  display:grid;
+  grid-template-columns:1fr 300px 1fr;
+  gap:18px;
+  padding:22px 28px;
+  max-width:1700px;
+  width:100%;
+  margin:0 auto;
+  min-height:0;
+}
+.pane{
+  position:relative;
+  background:var(--paper-card);
+  border:1px solid var(--line);
+  box-shadow:0 2px 10px #2b262014, 0 0 0 4px var(--paper-card), 0 0 0 5px var(--line-soft);
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  min-width:0;
+}
+.pane-head{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:10px 14px;
+  border-bottom:1px solid var(--line-soft);
+}
+.pane-num{
+  font-size:.7rem;
+  color:var(--paper-card);
+  background:var(--ink);
+  padding:2px 8px;
+  letter-spacing:.2em;
+}
+.pane-title{
+  font-size:.95rem;
+  font-weight:700;
+  letter-spacing:.3em;
+}
+.pane-head .count{
+  margin-left:auto;
+  font-size:.72rem;
+  color:var(--ink-faint);
+  letter-spacing:.08em;
+  font-variant-numeric:tabular-nums;
+}
+.pane-tools{
+  display:flex;
+  gap:8px;
+  padding:8px 12px;
+  border-bottom:1px solid var(--line-soft);
+  background:var(--paper-tool);
+}
+textarea{
+  flex:1;
+  width:100%;
+  min-height:340px;
+  resize:none;
+  border:none;
+  outline:none;
+  background:transparent;
+  padding:16px 18px;
+  font-family:var(--serif);
+  font-size:1rem;
+  line-height:2;
+  color:var(--ink);
+}
+textarea::placeholder{color:var(--placeholder)}
+textarea:focus{box-shadow:inset 0 0 0 2px var(--focus)}
+/* 朱の縦罫(原稿用紙のマージン線) */
+.pane::before{
+  content:"";
+  position:absolute;
+  top:0;bottom:0;left:8px;
+  width:1px;
+  background:var(--shu);
+  opacity:.35;
+  pointer-events:none;
+}
+.pane-label-v{
+  position:absolute;
+  right:-13px;
+  top:18px;
+  writing-mode:vertical-rl;
+  font-size:.7rem;
+  letter-spacing:.45em;
+  color:var(--shu);
+  background:var(--paper);
+  padding:8px 2px;
+  border:1px solid var(--shu-pale);
+  user-select:none;
+}
+
+/* ── コマンドパネル ───────────────────── */
+.cmd{
+  background:var(--paper-card);
+  border:1px solid var(--line);
+  box-shadow:0 2px 10px #2b262014, 0 0 0 4px var(--paper-card), 0 0 0 5px var(--line-soft);
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  overflow:hidden;
+}
+.cmd-head{
+  padding:10px 14px;
+  border-bottom:1px solid var(--line-soft);
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.cmd-head .pane-title{flex:1}
+.bulk{
+  display:flex;gap:6px;
+}
+.bulk button{
+  font-family:var(--serif);
+  font-size:.68rem;
+  letter-spacing:.1em;
+  background:none;
+  border:1px solid var(--line);
+  color:var(--ink-soft);
+  padding:3px 7px;
+  cursor:pointer;
+}
+.bulk button:hover{border-color:var(--shu);color:var(--shu)}
+.rules{
+  flex:1;
+  overflow-y:auto;
+  padding:10px 12px 14px;
+  scrollbar-width:thin;
+  scrollbar-color:var(--line) transparent;
+}
+.rule{
+  padding:9px 4px 9px 2px;
+  border-bottom:1px dashed var(--line-soft);
+}
+.rule:last-child{border-bottom:none}
+.rule>label{
+  display:flex;
+  align-items:flex-start;
+  gap:9px;
+  cursor:pointer;
+  font-size:.86rem;
+  line-height:1.55;
+}
+.rule .opts{
+  margin:7px 0 0 27px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px 14px;
+  align-items:center;
+}
+.rule .opts label{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  font-size:.8rem;
+  color:var(--ink-soft);
+  cursor:pointer;
+}
+.rule input[type="text"]{
+  font-family:var(--serif);
+  font-size:.85rem;
+  border:1px solid var(--line);
+  background:var(--field);
+  color:var(--ink);
+  padding:4px 8px;
+  width:100%;
+  margin-top:6px;
+  outline:none;
+}
+.rule input[type="text"]:focus{border-color:var(--shu);box-shadow:0 0 0 2px var(--focus)}
+.exc-note{font-size:.72rem;color:var(--ink-faint);margin:6px 0 0 27px}
+
+/* カスタムチェックボックス */
+input[type="checkbox"],input[type="radio"]{
+  appearance:none;
+  -webkit-appearance:none;
+  width:17px;height:17px;
+  flex:none;
+  border:1.5px solid var(--ink-soft);
+  background:var(--field);
+  cursor:pointer;
+  position:relative;
+  top:2px;
+  display:inline-grid;
+  place-content:center;
+}
+input[type="radio"]{border-radius:50%}
+input[type="checkbox"]:checked,input[type="radio"]:checked{
+  background:var(--shu);
+  border-color:var(--shu-deep);
+}
+input[type="checkbox"]:checked::after{
+  content:"✓";
+  color:var(--on-shu);
+  font-size:13px;
+  font-weight:700;
+  line-height:1;
+}
+input[type="radio"]:checked::after{
+  content:"";
+  width:7px;height:7px;
+  border-radius:50%;
+  background:var(--on-shu);
+}
+input[type="checkbox"]:focus-visible,input[type="radio"]:focus-visible{
+  outline:2px solid var(--focus);outline-offset:1px;
+}
+
+/* 変換ボタン */
+.cmd-foot{
+  padding:12px 14px 14px;
+  border-top:1px solid var(--line-soft);
+  background:var(--paper-tool);
+}
+#btnConvert{
+  width:100%;
+  font-family:var(--serif);
+  font-size:1.05rem;
+  font-weight:700;
+  letter-spacing:.5em;
+  text-indent:.5em;
+  color:var(--on-shu);
+  background:linear-gradient(180deg,var(--shu),var(--shu-deep));
+  border:1px solid var(--shu-deep);
+  padding:13px 0 14px;
+  cursor:pointer;
+  box-shadow:0 2px 0 #6e1d13, 0 4px 10px #93281c33;
+  transition:transform .06s, box-shadow .06s, filter .15s;
+}
+#btnConvert:hover{filter:brightness(1.07)}
+#btnConvert:active{transform:translateY(2px);box-shadow:0 0 0 #6e1d13, 0 2px 5px #93281c33}
+.cmd-foot .hint{
+  margin-top:8px;
+  font-size:.68rem;
+  text-align:center;
+  color:var(--ink-faint);
+  letter-spacing:.1em;
+}
+
+/* 小ボタン */
+.tbtn{
+  font-family:var(--serif);
+  font-size:.74rem;
+  letter-spacing:.15em;
+  background:var(--field);
+  border:1px solid var(--line);
+  color:var(--ink-soft);
+  padding:4px 12px;
+  cursor:pointer;
+  transition:border-color .15s,color .15s;
+}
+.tbtn:hover{border-color:var(--shu);color:var(--shu)}
+
+/* ── フッター ─────────────────────────── */
+footer{
+  border-top:1px solid var(--line);
+  padding:12px 28px;
+  text-align:center;
+  font-size:.74rem;
+  color:var(--ink-faint);
+  letter-spacing:.18em;
+  background:linear-gradient(0deg,var(--grad),transparent);
+}
+
+/* ── トースト ─────────────────────────── */
+#toast{
+  position:fixed;
+  left:50%;bottom:46px;
+  transform:translateX(-50%) translateY(20px);
+  background:var(--toast-bg);
+  color:#fdf8ee;
+  font-size:.85rem;
+  letter-spacing:.25em;
+  text-indent:.25em;
+  padding:11px 30px;
+  border-left:4px solid var(--shu);
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .25s, transform .25s;
+  z-index:50;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.err{background:var(--shu-deep);border-left-color:var(--ink)}
+
+/* ── レスポンシブ ─────────────────────── */
+@media (max-width:1100px){
+  main{grid-template-columns:1fr 1fr;grid-template-rows:auto auto}
+  .cmd{grid-column:1 / -1;grid-row:2;max-height:none}
+  .pane-label-v{display:none}
+  textarea{min-height:260px}
+}
+@media (max-width:680px){
+  main{grid-template-columns:1fr;padding:16px}
+  header{padding:16px 18px 12px}
+  header h1{font-size:1.3rem;letter-spacing:.3em}
+  header .seal{display:none}
+  #btnTheme{right:14px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>小説文書修正</h1>
+  <span class="sub">NOVEL TEXT FORMATTER ── 指定フォーマット整形具</span>
+  <button id="btnTheme" type="button" title="表示モード切替">☾ 夜</button>
+  <span class="seal" aria-hidden="true">整</span>
+</header>
+
+<main>
+  <!-- テキスト欄１ -->
+  <section class="pane" aria-label="テキスト欄1 原文">
+    <div class="pane-head">
+      <span class="pane-num">壱</span>
+      <span class="pane-title">原　文</span>
+      <span class="count" id="cnt1">0 字</span>
+    </div>
+    <div class="pane-tools">
+      <button class="tbtn" id="btnPaste" type="button">貼り付け</button>
+      <button class="tbtn" id="btnClear" type="button">クリア</button>
+    </div>
+    <textarea id="src" placeholder="ここに修正したい文章を貼り付けてください。&#10;入力すると右欄に整形結果が随時表示されます。" spellcheck="false"></textarea>
+    <span class="pane-label-v">テキスト欄一</span>
+  </section>
+
+  <!-- コマンドパネル -->
+  <section class="cmd" aria-label="コマンドパネル">
+    <div class="cmd-head">
+      <span class="pane-title">整形指定</span>
+      <span class="bulk">
+        <button type="button" id="btnAll">全選択</button>
+        <button type="button" id="btnNone">全解除</button>
+      </span>
+    </div>
+    <div class="rules">
+
+      <div class="rule">
+        <label><input type="checkbox" id="r1" class="main" checked>
+          <span>"…"と"―"は必ず二連続</span></label>
+      </div>
+
+      <div class="rule">
+        <label><input type="checkbox" id="r2" class="main" checked>
+          <span>行頭字下げ</span></label>
+        <div class="exc-note">例外（この文字で始まる行は字下げしない）</div>
+        <input type="text" id="r2exc" value="「（【『≪｛" spellcheck="false" style="margin-left:27px;width:calc(100% - 27px)">
+      </div>
+
+      <div class="rule">
+        <label><input type="checkbox" id="r3" class="main" checked>
+          <span>感嘆符と疑問符の後はスペース</span></label>
+        <div class="opts">
+          <label><input type="radio" name="r3sp" id="r3zen" checked>全角</label>
+          <label><input type="radio" name="r3sp" id="r3han">半角</label>
+        </div>
+      </div>
+
+      <div class="rule">
+        <label><input type="checkbox" id="r4" class="main" checked>
+          <span>英単語の前後に半角空白挿入</span></label>
+      </div>
+
+      <div class="rule">
+        <label><input type="checkbox" id="r5" class="main" checked>
+          <span>アラビア数字の前後に半角空白挿入</span></label>
+      </div>
+
+      <div class="rule">
+        <label><input type="checkbox" id="r6" class="main" checked>
+          <span>カッコの直後と閉じカッコの直前に半角空白挿入</span></label>
+        <div class="exc-note">例外（空白を入れないカッコ）</div>
+        <input type="text" id="r6exc" value="（）【】「」『』｛｝" spellcheck="false" style="margin-left:27px;width:calc(100% - 27px)">
+      </div>
+
+      <div class="rule">
+        <label><input type="checkbox" id="r7" class="main" checked>
+          <span>二連続の空白削除</span></label>
+        <div class="opts">
+          <label><input type="checkbox" id="r7zen" checked>全角</label>
+          <label><input type="checkbox" id="r7han" checked>半角</label>
+        </div>
+      </div>
+
+      <div class="rule">
+        <label><input type="checkbox" id="r8" class="main" checked>
+          <span>行末トリミング</span></label>
+        <div class="opts">
+          <label><input type="checkbox" id="r8sp" checked>空白</label>
+        </div>
+      </div>
+
+      <div class="rule">
+        <label><input type="checkbox" id="r9" class="main">
+          <span>会話末尾の句点削除</span></label>
+        <div class="opts">
+          <label><input type="checkbox" id="r9a">。</label>
+          <label><input type="checkbox" id="r9b">、</label>
+          <label><input type="checkbox" id="r9c">，</label>
+          <label><input type="checkbox" id="r9d">．</label>
+        </div>
+      </div>
+
+    </div>
+    <div class="cmd-foot">
+      <button id="btnConvert" type="button">変換してコピー</button>
+      <div class="hint">Ctrl + Enter でも実行できます</div>
+    </div>
+  </section>
+
+  <!-- テキスト欄２ -->
+  <section class="pane" aria-label="テキスト欄2 整形後">
+    <div class="pane-head">
+      <span class="pane-num">弐</span>
+      <span class="pane-title">整形後</span>
+      <span class="count" id="cnt2">0 字</span>
+    </div>
+    <div class="pane-tools">
+      <button class="tbtn" id="btnCopy" type="button">コピー</button>
+    </div>
+    <textarea id="dst" placeholder="整形結果がここに出力されます。" readonly spellcheck="false"></textarea>
+    <span class="pane-label-v">テキスト欄二</span>
+  </section>
+</main>
+
+<footer>© 2026 curemagiclab-jp — Released under the MIT License.</footer>
+
+<div id="toast" role="status"></div>
+
+<script>
+"use strict";
+
+/* ───── 整形ルール ───── */
+
+const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// 1. "…"と"―"は必ず二連続（奇数連は1つ足して偶数化、単独は二連に）
+function ruleDouble(t){
+  return t
+    .replace(/…+/g,        m => "…".repeat(m.length + (m.length % 2)))
+    .replace(/―+/g,        m => "―".repeat(m.length + (m.length % 2)))
+    .replace(/—+/g,        m => "—".repeat(m.length + (m.length % 2)));
+}
+
+// 9. 会話末尾の句点削除（「…。」→「…」）
+function ruleDialogPunct(t, marks){
+  if(!marks) return t;
+  const re = new RegExp("[" + escRe(marks) + "]+(?=[」』])", "g");
+  return t.replace(re, "");
+}
+
+// 3. 感嘆符・疑問符の後にスペース（行末・閉じ括弧前・連続符の途中は除く）
+function ruleExclSpace(t, sp){
+  return t.replace(
+    /([！？!?])(?=[^！？!?\s」』）〕】｝〉》≫＞’”…―、。，．])/g,
+    "$1" + sp
+  );
+}
+
+// 4. 英単語の前後に半角空白（かな・カナ・漢字との境界のみ）
+const JP = "\\u3041-\\u3096\\u30A1-\\u30FA\\u30FC\\u4E00-\\u9FFF\\u3005\\u3006\\u3007\\u30FD\\u30FE\\u309D\\u309E";
+function ruleLatinSpace(t){
+  return t
+    .replace(new RegExp("([" + JP + "])([A-Za-z])", "g"), "$1 $2")
+    .replace(new RegExp("([A-Za-z])([" + JP + "])", "g"), "$1 $2");
+}
+
+// 5. アラビア数字の前後に半角空白（かな・カナ・漢字との境界のみ）
+function ruleDigitSpace(t){
+  return t
+    .replace(new RegExp("([" + JP + "])([0-9０-９])", "g"), "$1 $2")
+    .replace(new RegExp("([0-9０-９])([" + JP + "])", "g"), "$1 $2");
+}
+
+// 6. カッコの直後・閉じカッコの直前に半角空白（例外指定あり）
+const BRACKET_PAIRS = [
+  ["（","）"],["(",")"],["【","】"],["[","]"],["「","」"],["『","』"],
+  ["｛","｝"],["{","}"],["〈","〉"],["《","》"],["≪","≫"],["〔","〕"],
+  ["＜","＞"],["〖","〗"],["〘","〙"],["〚","〛"]
+];
+function ruleBracketSpace(t, exc){
+  for(const [open, close] of BRACKET_PAIRS){
+    if(!exc.includes(open)){
+      t = t.replace(new RegExp(escRe(open) + "(?![ 　\\r\\n])", "g"), open + " ");
+    }
+    if(!exc.includes(close)){
+      t = t.replace(new RegExp("(?<![ 　])" + escRe(close), "g"), " " + close);
+    }
+  }
+  return t;
+}
+
+// 7. 二連続の空白削除（全角・半角を指定して1つに統合）
+function ruleCollapseSpace(t, zen, han){
+  if(zen && han) return t.replace(/([ 　])[ 　]+/g, "$1");
+  if(zen)        return t.replace(/　{2,}/g, "　");
+  if(han)        return t.replace(/ {2,}/g, " ");
+  return t;
+}
+
+// 8. 行末トリミング（空白）
+function ruleTrimEnd(t){
+  return t.split("\n").map(l => l.replace(/[ 　\t]+$/u, "")).join("\n");
+}
+
+// 2. 行頭字下げ（例外文字で始まる行・字下げ済みの行は除く）
+function ruleIndent(t, exc){
+  return t.split("\n").map(l => {
+    if(!l) return l;
+    const c = l[0];
+    if(c === "　" || c === " " || c === "\t") return l;
+    if(exc.includes(c)) return l;
+    return "　" + l;
+  }).join("\n");
+}
+
+/* ───── パイプライン ───── */
+
+const $ = id => document.getElementById(id);
+
+function convert(text){
+  let t = text.replace(/\r\n?/g, "\n");
+  if($("r1").checked) t = ruleDouble(t);
+  if($("r9").checked){
+    let marks = "";
+    if($("r9a").checked) marks += "。";
+    if($("r9b").checked) marks += "、";
+    if($("r9c").checked) marks += "，";
+    if($("r9d").checked) marks += "．";
+    t = ruleDialogPunct(t, marks);
+  }
+  if($("r3").checked) t = ruleExclSpace(t, $("r3zen").checked ? "　" : " ");
+  if($("r4").checked) t = ruleLatinSpace(t);
+  if($("r5").checked) t = ruleDigitSpace(t);
+  if($("r6").checked) t = ruleBracketSpace(t, $("r6exc").value);
+  if($("r7").checked) t = ruleCollapseSpace(t, $("r7zen").checked, $("r7han").checked);
+  if($("r8").checked && $("r8sp").checked) t = ruleTrimEnd(t);
+  if($("r2").checked) t = ruleIndent(t, $("r2exc").value);
+  return t;
+}
+
+/* ───── 設定の保存・復元 ───── */
+
+const STORE_KEY = "shousetsu-bunsho-shuusei-v1";
+
+function saveSettings(){
+  const o = { dark: document.body.classList.contains("dark"), inputs: {} };
+  document.querySelectorAll(".rules input").forEach(el => {
+    o.inputs[el.id] = el.type === "text" ? el.value : el.checked;
+  });
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(o)); }catch(e){}
+}
+
+function loadSettings(){
+  let o = null;
+  try{ o = JSON.parse(localStorage.getItem(STORE_KEY)); }catch(e){}
+  if(!o) return;
+  document.body.classList.toggle("dark", !!o.dark);
+  for(const [id, v] of Object.entries(o.inputs || {})){
+    const el = document.getElementById(id);
+    if(!el) continue;
+    if(el.type === "text") el.value = String(v);
+    else el.checked = !!v;
+  }
+}
+
+function updateThemeBtn(){
+  const dark = document.body.classList.contains("dark");
+  $("btnTheme").textContent = dark ? "☀ 昼" : "☾ 夜";
+}
+
+/* ───── UI ───── */
+
+const src = $("src"), dst = $("dst");
+
+function updateCounts(){
+  $("cnt1").textContent = [...src.value].length.toLocaleString() + " 字";
+  $("cnt2").textContent = [...dst.value].length.toLocaleString() + " 字";
+}
+
+function refresh(){
+  dst.value = src.value ? convert(src.value) : "";
+  updateCounts();
+}
+
+let toastTimer = null;
+function toast(msg, isErr){
+  const el = $("toast");
+  el.textContent = msg;
+  el.classList.toggle("err", !!isErr);
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+async function copyToClipboard(text){
+  if(!text) return false;
+  try{
+    await navigator.clipboard.writeText(text);
+    return true;
+  }catch(e){
+    /* file:// 等で Clipboard API が使えない場合のフォールバック */
+    try{
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.cssText = "position:fixed;left:-9999px;top:0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return ok;
+    }catch(e2){
+      return false;
+    }
+  }
+}
+
+async function convertAndCopy(){
+  refresh();
+  if(!dst.value){
+    toast("原文が空です", true);
+    return;
+  }
+  const ok = await copyToClipboard(dst.value);
+  toast(ok ? "変換してコピーしました" : "変換しました（コピー失敗）", !ok);
+}
+
+/* イベント */
+src.addEventListener("input", refresh);
+document.querySelectorAll(".rules input").forEach(el =>
+  el.addEventListener("input", () => { refresh(); saveSettings(); }));
+
+$("btnTheme").addEventListener("click", () => {
+  document.body.classList.toggle("dark");
+  updateThemeBtn();
+  saveSettings();
+});
+
+$("btnConvert").addEventListener("click", convertAndCopy);
+document.addEventListener("keydown", e => {
+  if(e.ctrlKey && e.key === "Enter"){ e.preventDefault(); convertAndCopy(); }
+});
+
+$("btnCopy").addEventListener("click", async () => {
+  if(!dst.value){ toast("出力が空です", true); return; }
+  const ok = await copyToClipboard(dst.value);
+  toast(ok ? "コピーしました" : "コピーに失敗しました", !ok);
+});
+
+$("btnClear").addEventListener("click", () => {
+  src.value = "";
+  refresh();
+  src.focus();
+});
+
+$("btnPaste").addEventListener("click", async () => {
+  try{
+    const t = await navigator.clipboard.readText();
+    src.value = t;
+    refresh();
+    toast("貼り付けました");
+  }catch(e){
+    toast("Ctrl+V で貼り付けてください", true);
+    src.focus();
+  }
+});
+
+$("btnAll").addEventListener("click", () => {
+  document.querySelectorAll(".main").forEach(c => c.checked = true);
+  refresh();
+  saveSettings();
+});
+$("btnNone").addEventListener("click", () => {
+  document.querySelectorAll(".main").forEach(c => c.checked = false);
+  refresh();
+  saveSettings();
+});
+
+loadSettings();
+updateThemeBtn();
+refresh();
+</script>
+</body>
+</html>
