@@ -478,6 +478,9 @@ footer{
           <span>行頭字下げ</span></label>
         <div class="exc-note">例外（この文字で始まる行は字下げしない）</div>
         <input type="text" id="r2exc" value="「（【『≪｛" spellcheck="false" style="margin-left:27px;width:calc(100% - 27px)">
+        <div class="opts">
+          <label><input type="checkbox" id="r2emoji" checked>絵文字も例外</label>
+        </div>
       </div>
 
       <div class="rule">
@@ -637,14 +640,39 @@ function ruleTrimEnd(t){
 }
 
 // 2. 行頭字下げ（例外文字で始まる行・字下げ済みの行は除く）
-function ruleIndent(t, exc){
+// 絵文字＝ピクトグラム・国旗（地域指標）・キーキャップ（1️⃣ 等）
+const EMOJI_RE = /^(?:[\p{Extended_Pictographic}\p{Regional_Indicator}]|[#*0-9]\uFE0F?\u20E3)/u;
+function ruleIndent(t, exc, emoji){
   return t.split("\n").map(l => {
     if(!l) return l;
     const c = l[0];
     if(c === "　" || c === " " || c === "\t") return l;
     if(exc.includes(c)) return l;
+    if(emoji && EMOJI_RE.test(l)) return l;
     return "　" + l;
   }).join("\n");
+}
+
+// 改行コードの正規化（U+000B/000C 縦タブ・改ページ、U+0085 NEL、U+2028/2029 行・段落区切り）
+const ODD_BREAKS = new RegExp("[" + String.fromCharCode(0x0B, 0x0C, 0x85, 0x2028, 0x2029) + "]", "g");
+function normalizeBreaks(s){
+  return s.replace(/\r\n?/g, "\n").replace(ODD_BREAKS, "\n");
+}
+
+// クリップボードの text/html から行構造を復元してプレーンテキスト化
+function htmlToText(html){
+  let s = html.replace(/<(style|script)[\s\S]*?<\/\1\s*>/gi, "");
+  s = s.replace(/[\r\n\t]+/g, "");  // HTMLソース上の生改行は表示されないので除去
+  s = s.replace(/<br\s*\/?>/gi, "\n");
+  s = s.replace(/<\/(p|div|h[1-6]|li|tr|blockquote|pre)\s*>/gi, "\n");
+  s = s.replace(/<[^>]*>/g, "");
+  s = s.replace(/&#x([0-9a-fA-F]+);/g, (m, h) => String.fromCodePoint(parseInt(h, 16)))
+       .replace(/&#(\d+);/g, (m, d) => String.fromCodePoint(+d))
+       .replace(/&nbsp;/gi, " ")
+       .replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
+       .replace(/&quot;/gi, '"').replace(/&apos;/gi, "'")
+       .replace(/&amp;/gi, "&");
+  return normalizeBreaks(s).replace(/^\n+/, "").replace(/\n+$/, "");
 }
 
 /* ───── パイプライン ───── */
@@ -652,7 +680,7 @@ function ruleIndent(t, exc){
 const $ = id => document.getElementById(id);
 
 function convert(text){
-  let t = text.replace(/\r\n?/g, "\n");
+  let t = normalizeBreaks(text);
   if($("r1").checked) t = ruleDouble(t);
   if($("r9").checked){
     let marks = "";
@@ -668,7 +696,7 @@ function convert(text){
   if($("r6").checked) t = ruleBracketSpace(t, $("r6exc").value);
   if($("r7").checked) t = ruleCollapseSpace(t, $("r7zen").checked, $("r7han").checked);
   if($("r8").checked && $("r8sp").checked) t = ruleTrimEnd(t);
-  if($("r2").checked) t = ruleIndent(t, $("r2exc").value);
+  if($("r2").checked) t = ruleIndent(t, $("r2exc").value, $("r2emoji").checked);
   return t;
 }
 
@@ -760,6 +788,30 @@ async function convertAndCopy(){
 
 /* イベント */
 src.addEventListener("input", refresh);
+
+/* 貼り付け時の改行補正：特殊な改行コードを\nに統一し、
+   text/plain に改行が無い場合は text/html の構造から復元する */
+function pasteText(dt){
+  const plain = normalizeBreaks(dt.getData("text/plain"));
+  if(plain.includes("\n")) return plain;
+  const html = dt.getData("text/html");
+  if(html){
+    const t = htmlToText(html);
+    if(t.includes("\n")) return t;
+  }
+  return plain;
+}
+src.addEventListener("paste", e => {
+  if(!e.clipboardData) return;
+  const raw = e.clipboardData.getData("text/plain");
+  const t = pasteText(e.clipboardData);
+  if(t === raw) return;  // 補正不要なら既定の貼り付けに任せる（Undo履歴も保持）
+  e.preventDefault();
+  if(!document.execCommand("insertText", false, t)){
+    src.setRangeText(t, src.selectionStart, src.selectionEnd, "end");
+    refresh();
+  }
+});
 document.querySelectorAll(".rules input").forEach(el =>
   el.addEventListener("input", () => { refresh(); saveSettings(); }));
 
@@ -788,7 +840,17 @@ $("btnClear").addEventListener("click", () => {
 
 $("btnPaste").addEventListener("click", async () => {
   try{
-    const t = await navigator.clipboard.readText();
+    let t = normalizeBreaks(await navigator.clipboard.readText());
+    if(!t.includes("\n")){
+      try{
+        for(const item of await navigator.clipboard.read()){
+          if(item.types.includes("text/html")){
+            const ht = htmlToText(await (await item.getType("text/html")).text());
+            if(ht.includes("\n")){ t = ht; break; }
+          }
+        }
+      }catch(e2){ /* text/html が読めない環境では plain のまま */ }
+    }
     src.value = t;
     refresh();
     toast("貼り付けました");
