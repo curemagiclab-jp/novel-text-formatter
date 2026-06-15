@@ -537,6 +537,11 @@ footer{
         </div>
       </div>
 
+      <div class="rule">
+        <label><input type="checkbox" id="r10" class="main">
+          <span>行頭の絵文字の前に空行を挿入</span></label>
+      </div>
+
     </div>
     <div class="cmd-foot">
       <button id="btnConvert" type="button">変換してコピー</button>
@@ -653,6 +658,18 @@ function ruleIndent(t, exc, emoji){
   }).join("\n");
 }
 
+// 10. 行頭が絵文字の行の前に空行を挿入（先頭行・既に空行が前にある場合は追加しない）
+function ruleEmojiBlank(t){
+  const lines = t.split("\n");
+  const out = [];
+  for(let i = 0; i < lines.length; i++){
+    const l = lines[i];
+    if(i > 0 && EMOJI_RE.test(l) && out[out.length - 1] !== "") out.push("");
+    out.push(l);
+  }
+  return out.join("\n");
+}
+
 // 改行コードの正規化（U+000B/000C 縦タブ・改ページ、U+0085 NEL、U+2028/2029 行・段落区切り）
 const ODD_BREAKS = new RegExp("[" + String.fromCharCode(0x0B, 0x0C, 0x85, 0x2028, 0x2029) + "]", "g");
 function normalizeBreaks(s){
@@ -697,6 +714,7 @@ function convert(text){
   if($("r7").checked) t = ruleCollapseSpace(t, $("r7zen").checked, $("r7han").checked);
   if($("r8").checked && $("r8sp").checked) t = ruleTrimEnd(t);
   if($("r2").checked) t = ruleIndent(t, $("r2exc").value, $("r2emoji").checked);
+  if($("r10").checked) t = ruleEmojiBlank(t);
   return t;
 }
 
