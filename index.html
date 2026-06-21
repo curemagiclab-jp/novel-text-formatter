@@ -302,6 +302,22 @@ textarea:focus{box-shadow:inset 0 0 0 2px var(--focus)}
   outline:none;
 }
 .rule input[type="text"]:focus{border-color:var(--shu);box-shadow:0 0 0 2px var(--focus)}
+.rule textarea{
+  font-family:var(--serif);
+  font-size:.85rem;
+  border:1px solid var(--line);
+  background:var(--field);
+  color:var(--ink);
+  padding:6px 8px;
+  width:100%;
+  margin-top:6px;
+  outline:none;
+  resize:vertical;
+  min-height:60px;
+  flex:none;
+  line-height:1.5;
+}
+.rule textarea:focus{border-color:var(--shu);box-shadow:0 0 0 2px var(--focus)}
 .exc-note{font-size:.72rem;color:var(--ink-faint);margin:6px 0 0 27px}
 
 /* カスタムチェックボックス */
@@ -338,37 +354,6 @@ input[type="radio"]:checked::after{
 }
 input[type="checkbox"]:focus-visible,input[type="radio"]:focus-visible{
   outline:2px solid var(--focus);outline-offset:1px;
-}
-
-/* 変換ボタン */
-.cmd-foot{
-  padding:12px 14px 14px;
-  border-top:1px solid var(--line-soft);
-  background:var(--paper-tool);
-}
-#btnConvert{
-  width:100%;
-  font-family:var(--serif);
-  font-size:1.05rem;
-  font-weight:700;
-  letter-spacing:.5em;
-  text-indent:.5em;
-  color:var(--on-shu);
-  background:linear-gradient(180deg,var(--shu),var(--shu-deep));
-  border:1px solid var(--shu-deep);
-  padding:13px 0 14px;
-  cursor:pointer;
-  box-shadow:0 2px 0 #6e1d13, 0 4px 10px #93281c33;
-  transition:transform .06s, box-shadow .06s, filter .15s;
-}
-#btnConvert:hover{filter:brightness(1.07)}
-#btnConvert:active{transform:translateY(2px);box-shadow:0 0 0 #6e1d13, 0 2px 5px #93281c33}
-.cmd-foot .hint{
-  margin-top:8px;
-  font-size:.68rem;
-  text-align:center;
-  color:var(--ink-faint);
-  letter-spacing:.1em;
 }
 
 /* 小ボタン */
@@ -469,6 +454,12 @@ footer{
     <div class="rules">
 
       <div class="rule">
+        <label><input type="checkbox" id="rhdr" class="main">
+          <span>ヘッダーを追加</span></label>
+        <textarea id="rhdrtext" placeholder="ヘッダー文章"></textarea>
+      </div>
+
+      <div class="rule">
         <label><input type="checkbox" id="r1" class="main" checked>
           <span>"…"と"―"は必ず二連続</span></label>
       </div>
@@ -543,10 +534,6 @@ footer{
       </div>
 
     </div>
-    <div class="cmd-foot">
-      <button id="btnConvert" type="button">変換してコピー</button>
-      <div class="hint">Ctrl + Enter でも実行できます</div>
-    </div>
   </section>
 
   <!-- テキスト欄２ -->
@@ -557,7 +544,7 @@ footer{
       <span class="count" id="cnt2">0 字</span>
     </div>
     <div class="pane-tools">
-      <button class="tbtn" id="btnCopy" type="button">コピー</button>
+      <button class="tbtn" id="btnCopy" type="button">変換してコピー</button>
     </div>
     <textarea id="dst" placeholder="整形結果がここに出力されます。" readonly spellcheck="false"></textarea>
     <span class="pane-label-v">テキスト欄二</span>
@@ -715,6 +702,10 @@ function convert(text){
   if($("r8").checked && $("r8sp").checked) t = ruleTrimEnd(t);
   if($("r2").checked) t = ruleIndent(t, $("r2exc").value, $("r2emoji").checked);
   if($("r10").checked) t = ruleEmojiBlank(t);
+  if($("rhdr").checked) {
+    const hdr = $("rhdrtext").value;
+    if(hdr) t = hdr + "\n" + t;
+  }
   return t;
 }
 
@@ -724,8 +715,8 @@ const STORE_KEY = "shousetsu-bunsho-shuusei-v1";
 
 function saveSettings(){
   const o = { dark: document.body.classList.contains("dark"), inputs: {} };
-  document.querySelectorAll(".rules input").forEach(el => {
-    o.inputs[el.id] = el.type === "text" ? el.value : el.checked;
+  document.querySelectorAll(".rules input, .rules textarea").forEach(el => {
+    o.inputs[el.id] = (el.type === "text" || el.type === "textarea") ? el.value : el.checked;
   });
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(o)); }catch(e){}
 }
@@ -738,7 +729,7 @@ function loadSettings(){
   for(const [id, v] of Object.entries(o.inputs || {})){
     const el = document.getElementById(id);
     if(!el) continue;
-    if(el.type === "text") el.value = String(v);
+    if(el.type === "text" || el.type === "textarea") el.value = String(v);
     else el.checked = !!v;
   }
 }
@@ -830,7 +821,7 @@ src.addEventListener("paste", e => {
     refresh();
   }
 });
-document.querySelectorAll(".rules input").forEach(el =>
+document.querySelectorAll(".rules input, .rules textarea").forEach(el =>
   el.addEventListener("input", () => { refresh(); saveSettings(); }));
 
 $("btnTheme").addEventListener("click", () => {
@@ -839,16 +830,11 @@ $("btnTheme").addEventListener("click", () => {
   saveSettings();
 });
 
-$("btnConvert").addEventListener("click", convertAndCopy);
 document.addEventListener("keydown", e => {
   if(e.ctrlKey && e.key === "Enter"){ e.preventDefault(); convertAndCopy(); }
 });
 
-$("btnCopy").addEventListener("click", async () => {
-  if(!dst.value){ toast("出力が空です", true); return; }
-  const ok = await copyToClipboard(dst.value);
-  toast(ok ? "コピーしました" : "コピーに失敗しました", !ok);
-});
+$("btnCopy").addEventListener("click", convertAndCopy);
 
 $("btnClear").addEventListener("click", () => {
   src.value = "";
