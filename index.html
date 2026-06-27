@@ -435,7 +435,7 @@ footer{
       <span class="count" id="cnt1">0 字</span>
     </div>
     <div class="pane-tools">
-      <button class="tbtn" id="btnPaste" type="button">貼り付け</button>
+      <button class="tbtn" id="btnPaste" type="button">貼り付けて変換コピー</button>
       <button class="tbtn" id="btnClear" type="button">クリア</button>
     </div>
     <textarea id="src" placeholder="ここに修正したい文章を貼り付けてください。&#10;入力すると右欄に整形結果が随時表示されます。" spellcheck="false"></textarea>
@@ -856,8 +856,7 @@ $("btnPaste").addEventListener("click", async () => {
       }catch(e2){ /* text/html が読めない環境では plain のまま */ }
     }
     src.value = t;
-    refresh();
-    toast("貼り付けました");
+    await convertAndCopy();
   }catch(e){
     toast("Ctrl+V で貼り付けてください", true);
     src.focus();
